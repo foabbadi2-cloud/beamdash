@@ -1,0 +1,10 @@
+[
+ {"code":"covet","name":"Ibishu Covet","real":"VW Golf Mk1/Mk2-style hatchback","maxRpm":7000,"red":6200,"maxKmh":200,"accent":"#4FC3F7","verified":false},
+ {"code":"sbr","name":"Hirochi SBR4","real":"Subaru BRZ / Toyota GT86","maxRpm":8000,"red":7200,"maxKmh":260,"accent":"#FF7043","verified":false},
+ {"code":"etk8","name":"ETK 800 Series","real":"BMW 3 Series-style sedan/wagon","maxRpm":7000,"red":6500,"maxKmh":260,"accent":"#42A5F5","verified":false},
+ {"code":"pickup","name":"Gavril D-Series","real":"Ford F-Series-style pickup","maxRpm":6000,"red":5500,"maxKmh":200,"accent":"#FFCA28","verified":false},
+ {"code":"roamer","name":"Gavril Roamer","real":"Jeep Grand Cherokee-style SUV","maxRpm":6500,"red":5800,"maxKmh":200,"accent":"#66BB6A","verified":false},
+ {"code":"moonhawk","name":"Bruckell Moonhawk","real":"Chevrolet Camaro / Ford Mustang-style muscle","maxRpm":6500,"red":6000,"maxKmh":240,"accent":"#EF5350","verified":false},
+ {"code":"sunburst","name":"Hirochi Sunburst","real":"Subaru Impreza / Mitsubishi Lancer-style sedan","maxRpm":7500,"red":6800,"maxKmh":240,"accent":"#AB47BC","verified":false},
+ {"code":"pessima","name":"Ibishu Pessima","real":"Toyota Camry / Honda Accord-style sedan","maxRpm":6500,"red":6000,"maxKmh":200,"accent":"#26A69A","verified":false}
+]

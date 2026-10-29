@@ -132,7 +132,7 @@ class _HomeState extends State<Home> {
   }
   Widget bar(String l, double v, Color c) => Padding(padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(children: [SizedBox(width: 64, child: Text(l, style: const TextStyle(fontSize: 12))),
-        Expanded(child: LinearProgressIndicator(value: v.clamp(0, 1), color: c, backgroundColor: Colors.white12))]));
+        Expanded(child: LinearProgressIndicator(value: v.clamp(0.0, 1.0).toDouble(), color: c, backgroundColor: Colors.white12))]));
 
   /// CarPlay-style launcher. (Not Apple CarPlay itself, that needs Apple's entitlement.)
   Widget carMode(Telemetry t, CarProfile p) {
@@ -179,8 +179,8 @@ class Arc extends CustomPainter {
     const start = pi * 0.75, sweep = pi * 1.5;
     final base = Paint()..style = PaintingStyle.stroke..strokeWidth = 22..strokeCap = StrokeCap.round;
     cv.drawArc(r, start, sweep, false, base..color = Colors.white12);
-    cv.drawArc(r, start + sweep * red, sweep * (1 - red), false, base..color = Colors.red.withOpacity(.35));
-    cv.drawArc(r, start, sweep * v.clamp(0, 1), false, base..color = v > red ? Colors.red : c);
+    cv.drawArc(r, start + sweep * red, sweep * (1 - red), false, base..color = const Color(0x59F44336));
+    cv.drawArc(r, start, sweep * v.clamp(0.0, 1.0).toDouble(), false, base..color = v > red ? Colors.red : c);
   }
   @override bool shouldRepaint(Arc o) => true;
 }

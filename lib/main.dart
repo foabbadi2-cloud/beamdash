@@ -58,16 +58,17 @@ class Feed {
   }
 }
 
-/// ---- Car profiles (assets/cars.json; edit/extend freely) ----
+/// ---- Car profiles (assets/cars.json; each car has its own dashboard skin) ----
+Color hx(String h) => Color(int.parse('FF${h.substring(1)}', radix: 16));
 class CarProfile {
-  final String code, name, real; final double maxRpm, red, maxKmh; final Color accent;
+  final String code, name, layout; final double maxRpm, red, maxKmh; final Color bg, face, ring, needle, text, accent;
   CarProfile(Map j)
-      : code = j['code'], name = j['name'], real = j['real'],
-        maxRpm = (j['maxRpm'] as num).toDouble(), red = (j['red'] as num).toDouble(),
-        maxKmh = (j['maxKmh'] as num).toDouble(),
-        accent = Color(int.parse('FF${(j['accent'] as String).substring(1)}', radix: 16));
+      : code = j['code'], name = j['name'], layout = j['layout'],
+        maxRpm = (j['maxRpm'] as num).toDouble(), red = (j['red'] as num).toDouble(), maxKmh = (j['maxKmh'] as num).toDouble(),
+        bg = hx(j['bg']), face = hx(j['face']), ring = hx(j['ring']), needle = hx(j['needle']), text = hx(j['text']), accent = hx(j['accent']);
 }
-CarProfile fallback = CarProfile({'code': '', 'name': 'Generic', 'real': '-', 'maxRpm': 7000, 'red': 6200, 'maxKmh': 240, 'accent': '#4FC3F7'});
+final CarProfile fallback = CarProfile({'code': '', 'name': 'Generic', 'layout': 'sport', 'maxRpm': 7000, 'red': 6200, 'maxKmh': 240,
+  'bg': '#000000', 'face': '#000000', 'ring': '#4FC3F7', 'needle': '#4FC3F7', 'text': '#FFFFFF', 'accent': '#4FC3F7'});
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -92,7 +93,7 @@ class _HomeState extends State<Home> {
       if (l.isNotEmpty && l.first.addresses.isNotEmpty) setState(() => ip = l.first.addresses.first.address);
     });
   }
-  CarProfile profile(String code) => manual ?? widget.cars.firstWhere((c) => code.toLowerCase().startsWith(c.code), orElse: () => fallback);
+  CarProfile profile(String code) => manual ?? widget.cars.firstWhere((c) { final k = code.toLowerCase(); return k.length >= 3 && (k.startsWith(c.code) || c.code.startsWith(k)); }, orElse: () => fallback);
 
   @override Widget build(BuildContext context) {
     return Scaffold(
@@ -114,21 +115,105 @@ class _HomeState extends State<Home> {
 
   Widget dash(Telemetry t, CarProfile p) {
     final kmh = t.speedMs * 3.6; final v = mph ? kmh * 0.621371 : kmh;
-    return Stack(alignment: Alignment.center, children: [
-      CustomPaint(size: Size.infinite, painter: Arc(t.rpm / p.maxRpm, p.red / p.maxRpm, p.accent)),
-      Column(mainAxisSize: MainAxisSize.min, children: [
-        GestureDetector(onTap: () => setState(() => mph = !mph),
-          child: Text(v.round().toString(), style: const TextStyle(fontSize: 96, fontWeight: FontWeight.w800))),
-        Text(mph ? 'MPH' : 'KM/H', style: const TextStyle(color: Colors.white54)),
-        Text(t.gearLabel, style: TextStyle(fontSize: 64, color: p.accent, fontWeight: FontWeight.bold)),
-        Text('${t.rpm.round()} rpm', style: const TextStyle(color: Colors.white70)),
-      ]),
-      Positioned(left: 16, bottom: 16, child: Text('${p.name}  •  ${p.real}', style: const TextStyle(color: Colors.white38))),
-      Positioned(right: 16, bottom: 16, child: SizedBox(width: 220, child: Column(children: [
-        bar('Fuel', t.fuel, Colors.amber), bar('Throttle', t.thr, Colors.green), bar('Brake', t.brk, Colors.red),
-        Text('Coolant ${t.temp.round()}°C', style: const TextStyle(color: Colors.white54)),
-      ]))),
-    ]);
+    final sMax = mph ? (p.maxKmh * 0.621371 / 20).ceil() * 20.0 : p.maxKmh; final u = mph ? 'MPH' : 'KM/H';
+    final step = sMax > 220 ? 40.0 : 20.0;
+    Widget dial(double val, double mx, double st, double red, String unit, {bool labels = true, int flex = 2}) => Expanded(flex: flex,
+      child: Padding(padding: const EdgeInsets.all(6), child: CustomPaint(painter: Dial(val / mx, red, mx, st, p, unit, labels))));
+    Widget gearBox() => Text(t.gearLabel, style: TextStyle(fontSize: 44, fontWeight: FontWeight.bold, color: p.accent));
+    Widget bars() => SizedBox(width: 260, child: Column(mainAxisSize: MainAxisSize.min, children: [
+      bar('Fuel', t.fuel, Colors.amber), bar('Throttle', t.thr, Colors.green), bar('Brake', t.brk, Colors.red)]));
+    Widget body;
+    if (p.layout == 'classic') {
+      body = Column(children: [
+        Expanded(child: Row(children: [dial(v, sMax, step, 0.88, u), dial(t.rpm / 1000, p.maxRpm / 1000, 1, p.red / p.maxRpm, 'x1000 RPM')])),
+        Padding(padding: const EdgeInsets.only(bottom: 6), child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [gearBox(), bars()])),
+      ]);
+    } else if (p.layout == 'cluster') {
+      body = Column(children: [
+        Expanded(child: Row(children: [
+          dial(t.fuel * 4, 4, 1, 2.0, 'FUEL', labels: false, flex: 1),
+          dial(v, sMax, step, 0.88, u), dial(t.rpm / 1000, p.maxRpm / 1000, 1, p.red / p.maxRpm, 'x1000 RPM'),
+          dial((t.temp / 130) * 4, 4, 1, 0.8, 'TEMP', labels: false, flex: 1)])),
+        Padding(padding: const EdgeInsets.only(bottom: 6), child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [gearBox(), bars()])),
+      ]);
+    } else if (p.layout == 'trio') {
+      body = Column(children: [
+        Expanded(child: Padding(padding: const EdgeInsets.only(top: 22), child: Row(children: [
+          dial(t.fuel * 4, 4, 1, 2.0, 'FUEL', labels: false, flex: 2),
+          dial(v, sMax, step, 0.88, u, flex: 4),
+          dial((t.temp / 130) * 4, 4, 1, 0.8, 'TEMP', labels: false, flex: 2)]))),
+        Padding(padding: const EdgeInsets.only(bottom: 6), child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [gearBox(), Text('${t.rpm.round()} rpm', style: TextStyle(color: p.text.withAlpha(200))), bars()])),
+      ]);
+    } else if (p.layout == 'quad') {
+      body = Column(children: [
+        Expanded(child: Container(margin: const EdgeInsets.fromLTRB(16, 30, 16, 6),
+          decoration: BoxDecoration(color: p.face, borderRadius: BorderRadius.circular(60), border: Border.all(color: p.ring, width: 5)),
+          child: Row(children: [
+            dial(v, sMax, step, 0.88, u, flex: 2), dial(t.rpm / 1000, p.maxRpm / 1000, 1, p.red / p.maxRpm, 'x1000 RPM', flex: 2),
+            dial(t.fuel * 4, 4, 1, 2.0, 'FUEL', labels: false, flex: 1), dial((t.temp / 130) * 4, 4, 1, 0.8, 'TEMP', labels: false, flex: 1)]))),
+        Padding(padding: const EdgeInsets.only(bottom: 6), child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [gearBox(), bars()])),
+      ]);
+    } else if (p.layout == 'lcd') {
+      body = Center(child: Container(width: 520, padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(14), border: Border.all(color: p.ring, width: 4)),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Text('${v.round()}', style: TextStyle(fontSize: 88, fontFamily: 'monospace', color: p.accent)),
+            Text(u, style: TextStyle(color: p.accent)), Text(t.gearLabel, style: TextStyle(fontSize: 64, fontFamily: 'monospace', color: p.accent))]),
+          LinearProgressIndicator(value: (t.rpm / p.maxRpm).clamp(0.0, 1.0).toDouble(), minHeight: 14,
+            color: t.rpm > p.red ? Colors.red : p.accent, backgroundColor: Colors.white12),
+          const SizedBox(height: 4), Text('${t.rpm.round()} RPM', style: TextStyle(color: p.accent, fontFamily: 'monospace')),
+          const SizedBox(height: 8), bars()])));
+    } else if (p.layout == 'retro') {
+      body = Column(children: [
+        Padding(padding: const EdgeInsets.fromLTRB(16, 26, 16, 4), child: SizedBox(height: 84, child: CustomPaint(size: Size.infinite, painter: HStrip(v / sMax, sMax, step, p)))),
+        Text('${v.round()} $u', style: TextStyle(color: p.text.withAlpha(200), fontSize: 14)),
+        Expanded(child: Row(children: [
+          dial(t.rpm / 1000, p.maxRpm / 1000, 1, p.red / p.maxRpm, 'x1000 RPM'),
+          dial(t.fuel * 4, 4, 1, 2.0, 'FUEL', labels: false, flex: 1),
+          dial((t.temp / 130) * 4, 4, 1, 0.8, 'TEMP', labels: false, flex: 1),
+          Expanded(flex: 1, child: Center(child: gearBox()))])),
+        Padding(padding: const EdgeInsets.only(bottom: 6), child: bars()),
+      ]);
+    } else if (p.layout == 'race') {
+      final lit = (t.rpm / p.maxRpm * 16).round();
+      body = Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 60), child: Row(children: [for (var i = 0; i < 16; i++)
+          Expanded(child: Center(child: Container(width: 26, height: 26, decoration: BoxDecoration(shape: BoxShape.circle,
+            color: i < lit ? (i / 16 >= p.red / p.maxRpm ? Colors.red : i > 7 ? Colors.amber : Colors.green) : Colors.white12))))])),
+        const SizedBox(height: 8),
+        Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+          Column(mainAxisSize: MainAxisSize.min, children: [Text(v.round().toString(), style: TextStyle(fontSize: 64, color: p.text)), Text(u, style: TextStyle(color: p.accent))]),
+          Text(t.gearLabel, style: TextStyle(fontSize: 160, height: 1, color: p.accent, fontWeight: FontWeight.w900)),
+          Column(mainAxisSize: MainAxisSize.min, children: [Text('${t.rpm.round()}', style: TextStyle(fontSize: 48, color: p.text)), const Text('RPM', style: TextStyle(color: Colors.white54))])]),
+        const SizedBox(height: 6), bars(),
+      ]);
+    } else if (p.layout == 'digital') {
+      final lit = (t.rpm / p.maxRpm * 32).round();
+      body = Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Row(children: [for (var i = 0; i < 32; i++)
+          Expanded(child: Container(height: 26, margin: const EdgeInsets.all(1.5),
+            color: i < lit ? (i / 32 >= p.red / p.maxRpm ? Colors.red : p.accent) : Colors.white10))])),
+        const SizedBox(height: 12),
+        Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+          Column(mainAxisSize: MainAxisSize.min, children: [
+            GestureDetector(onTap: () => setState(() => mph = !mph), child: Text(v.round().toString(), style: TextStyle(fontSize: 110, fontWeight: FontWeight.w300, color: p.text))),
+            Text(u, style: TextStyle(color: p.accent))]),
+          Text(t.gearLabel, style: TextStyle(fontSize: 96, color: p.accent, fontWeight: FontWeight.bold)),
+          Column(mainAxisSize: MainAxisSize.min, children: [Text('${t.rpm.round()}', style: TextStyle(fontSize: 40, color: p.text)), const Text('RPM', style: TextStyle(color: Colors.white54)), const SizedBox(height: 8), bars()])]),
+      ]);
+    } else {
+      body = Stack(alignment: Alignment.center, children: [
+        CustomPaint(size: Size.infinite, painter: Arc(t.rpm / p.maxRpm, p.red / p.maxRpm, p.accent)),
+        Column(mainAxisSize: MainAxisSize.min, children: [
+          GestureDetector(onTap: () => setState(() => mph = !mph), child: Text(v.round().toString(), style: TextStyle(fontSize: 96, fontWeight: FontWeight.w800, color: p.text))),
+          Text(u, style: const TextStyle(color: Colors.white54)),
+          Text(t.gearLabel, style: TextStyle(fontSize: 64, color: p.accent, fontWeight: FontWeight.bold)),
+          Text('${t.rpm.round()} rpm', style: const TextStyle(color: Colors.white70))]),
+        Positioned(right: 16, bottom: 16, child: bars()),
+      ]);
+    }
+    return Container(color: p.bg, child: Stack(children: [body, Positioned(left: 12, top: 6, child: Text(p.name, style: const TextStyle(color: Colors.white30, fontSize: 12)))]));
   }
   Widget bar(String l, double v, Color c) => Padding(padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(children: [SizedBox(width: 64, child: Text(l, style: const TextStyle(fontSize: 12))),
@@ -167,7 +252,7 @@ class _HomeState extends State<Home> {
     const SizedBox(height: 24), const Text('Car profile'),
     DropdownButton<CarProfile?>(value: manual, isExpanded: true, hint: const Text('Auto-detect'),
       items: [const DropdownMenuItem(value: null, child: Text('Auto-detect')),
-        for (final c in widget.cars) DropdownMenuItem(value: c, child: Text('${c.name}  →  ${c.real}'))],
+        for (final c in widget.cars) DropdownMenuItem(value: c, child: Text(c.name))],
       onChanged: (v) => setState(() => manual = v)),
   ]);
 }
@@ -183,4 +268,51 @@ class Arc extends CustomPainter {
     cv.drawArc(r, start, sweep * v.clamp(0.0, 1.0).toDouble(), false, base..color = v > red ? Colors.red : c);
   }
   @override bool shouldRepaint(Arc o) => true;
+}
+
+class Dial extends CustomPainter {
+  final double v, red, maxVal, step; final CarProfile p; final String unit; final bool labels;
+  Dial(this.v, this.red, this.maxVal, this.step, this.p, this.unit, this.labels);
+  @override void paint(Canvas cv, Size s) {
+    final c = s.center(Offset.zero); final r = min(s.width, s.height) / 2 - 4;
+    cv.drawCircle(c, r, Paint()..color = p.face);
+    cv.drawCircle(c, r, Paint()..style = PaintingStyle.stroke..strokeWidth = 5..color = p.ring);
+    const a0 = pi * 0.75, sw = pi * 1.5;
+    final n = max(1, (maxVal / step).round());
+    for (var i = 0; i <= n; i++) {
+      final a = a0 + sw * i / n; final d = Offset(cos(a), sin(a));
+      final col = (i * step / maxVal) >= red ? Colors.redAccent : p.text;
+      cv.drawLine(c + d * (r * .86), c + d * (r * .96), Paint()..color = col..strokeWidth = 3);
+      if (labels) {
+        final tp = TextPainter(text: TextSpan(text: '${(i * step).round()}', style: TextStyle(color: col, fontSize: r * .11)), textDirection: TextDirection.ltr)..layout();
+        tp.paint(cv, c + d * (r * .72) - Offset(tp.width / 2, tp.height / 2));
+      }
+    }
+    final na = a0 + sw * v.clamp(0.0, 1.0).toDouble();
+    cv.drawLine(c, c + Offset(cos(na), sin(na)) * (r * .8), Paint()..color = p.needle..strokeWidth = 4..strokeCap = StrokeCap.round);
+    cv.drawCircle(c, r * .07, Paint()..color = p.needle);
+    final u = TextPainter(text: TextSpan(text: unit, style: TextStyle(color: p.text.withAlpha(150), fontSize: r * .1)), textDirection: TextDirection.ltr)..layout();
+    u.paint(cv, c + Offset(-u.width / 2, r * .4));
+  }
+  @override bool shouldRepaint(Dial o) => true;
+}
+
+class HStrip extends CustomPainter {
+  final double v, maxVal, step; final CarProfile p;
+  HStrip(this.v, this.maxVal, this.step, this.p);
+  @override void paint(Canvas cv, Size s) {
+    final rr = RRect.fromRectAndRadius(Offset.zero & s, const Radius.circular(18));
+    cv.drawRRect(rr, Paint()..color = p.face);
+    cv.drawRRect(rr, Paint()..style = PaintingStyle.stroke..strokeWidth = 5..color = p.ring);
+    final n = max(1, (maxVal / step).round()); final w = s.width - 60;
+    for (var i = 0; i <= n; i++) {
+      final x = 30 + w * i / n;
+      cv.drawLine(Offset(x, s.height * .3), Offset(x, s.height * .5), Paint()..color = p.text..strokeWidth = 3);
+      final tp = TextPainter(text: TextSpan(text: '${(i * step).round()}', style: TextStyle(color: p.text, fontSize: s.height * .22)), textDirection: TextDirection.ltr)..layout();
+      tp.paint(cv, Offset(x - tp.width / 2, s.height * .54));
+    }
+    final nx = 30 + w * v.clamp(0.0, 1.0).toDouble();
+    cv.drawLine(Offset(nx, s.height * .12), Offset(nx, s.height * .5), Paint()..color = p.needle..strokeWidth = 5..strokeCap = StrokeCap.round);
+  }
+  @override bool shouldRepaint(HStrip o) => true;
 }
